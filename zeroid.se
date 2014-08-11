@@ -1,0 +1,150 @@
+shared:
+    LEAF_SIZE = 3
+    LEAF_HALF = 2
+    LEAF_FIELDS = 4
+
+    LEAF = 10000000000001
+    NODE = 10000000000002
+    USER = 10000000000003
+
+    UNRECOGNIZED = 1
+    RECOGNIZED = 2
+
+    NEW_ENTRY = 9999998
+
+    TIMESTAMP = 0
+    LONGITUDE = 1
+    DEPOSIT   = 2
+    QS        = 3
+    LOCATIONS = 100
+
+init:
+    contract.storage[QS] = create('quicksort_pairs.se')
+    contract.storage[TIMESTAMP] = 1405875600000
+    contract.storage[LONGITUDE] = 5250097
+    contract.storage[DEPOSIT]   = 100 # deposit fee
+    contract.storage[LOCATIONS] = LEAF
+
+code:
+
+    contract.storage[33] = contract.storage[33] + 1
+    count = contract.storage[33]
+
+    if msg.data[0] == 0: # register      
+
+        if contract.storage[msg.sender] or msg.value < contract.storage[DEPOSIT]:
+            return(0) # already registered or too low deposit
+
+        #contract.storage[msg.sender-1] = 999999999999999
+
+        longitude = msg.data[1]
+        latitude  = msg.data[2]
+
+        # contract.storage[msg.sender] = USER
+        # contract.storage[msg.sender + 1] = longitude
+        # contract.storage[msg.sender + 2] = latitude
+        # contract.storage[msg.sender + 3] = UNRECOGNIZED
+
+        # insert in tree
+
+        level = 0
+        pointer = LOCATIONS
+    
+        if contract.storage[pointer] == LEAF:            
+
+            i = 1 # start with 1, don't count the LEAF definition
+
+            # find an empty slot
+            while contract.storage[pointer + i] != 0:
+                i = i + LEAF_FIELDS
+
+            #contract.storage[4000+count] = pointer + i
+
+            if i > (LEAF_SIZE * LEAF_FIELDS):
+                # leaf is full, split it up
+
+                to_sort = array((LEAF_SIZE + 1) * 2)
+                j = 0
+                # offset of relevant coordinate
+                ofs = 1 + (level % 2)
+
+                # add all the couples 
+                while j <= LEAF_SIZE:
+                    storage_pos = pointer + (j*LEAF_FIELDS)
+                    to_sort[j*2]   = storage_pos
+                    to_sort[j*2+1] = contract.storage[storage_pos + ofs]
+                    j += 1
+
+                # add the point we're inserting to the list to be sorted
+                to_sort[LEAF_SIZE*2] = NEW_ENTRY
+                if ofs:
+                    to_sort[LEAF_SIZE*2+1] = longitude
+                else:
+                    to_sort[LEAF_SIZE*2+1] = latitude
+
+                # do the sort!        
+
+                call(contract.storage[QS], to_sort, LEAF_SIZE+1, LEAF_SIZE+1)
+
+                # debug
+                # j = 0
+                # while j < (LEAF_SIZE + 1):
+                #     contract.storage[5029+(j*2)] = to_sort[j*2]
+                #     contract.storage[5029+(j*2+1)] = to_sort[j*2+1]
+                #     j += 1
+
+                # the leaves get their address from hashing
+
+                pivot = to_sort[LEAF_HALF*2+1]
+
+                contract.storage[4] = pivot
+
+                leaf1 = 10000 #sha3(msg.sender - pivot)
+                leaf2 = 20000 #sha3(leaf1)
+
+                contract.storage[leaf1] = LEAF
+                contract.storage[leaf2] = LEAF
+
+                j = 0
+                while j < (LEAF_SIZE + 1):
+
+                    if j < LEAF_HALF:
+                        write_to = leaf1 + 1 + (j * LEAF_FIELDS)
+                    else:
+                        write_to = leaf2 + 1 + (j * LEAF_FIELDS)
+
+                    read_from = to_sort[j*2]
+
+                    # contract.storage[1100+j] = read_from
+                    # contract.storage[2100+j] = write_to
+
+                    if (read_from == NEW_ENTRY):
+
+                        contract.storage[333] = 1
+
+                        contract.storage[write_to+1] = msg.data[1]
+                        contract.storage[write_to+2] = msg.data[2]
+                        contract.storage[write_to+3] = msg.sender
+                        contract.storage[write_to+4] = UNRECOGNIZED
+                    else:
+                        k = 1
+                        while k < (LEAF_FIELDS + 1):
+                            contract.storage[write_to+k] = contract.storage[read_from+k]                        
+                            contract.storage[read_from+k] = 0
+                            k += 1
+                    j += 1
+
+                contract.storage[pointer] = NODE
+                contract.storage[pointer + 1] = leaf1
+                contract.storage[pointer + 2] = leaf2
+
+            #     return(0)
+
+            else:
+                #counter
+
+                #contract.storage[2000 + i] = pointer + i
+                contract.storage[pointer + i    ] = msg.data[1]  # longitude
+                contract.storage[pointer + i + 1] = msg.data[2]  # latitude
+                contract.storage[pointer + i + 2] = msg.sender   # owner
+                contract.storage[pointer + i + 3] = UNRECOGNIZED # status
